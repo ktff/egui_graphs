@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use egui::Color32;
 use petgraph::{
     stable_graph::{DefaultIx, EdgeIndex, IndexType},
     Directed, EdgeType,
@@ -15,6 +16,7 @@ pub struct EdgeProps<E: Clone> {
     pub order: usize,
     pub selected: bool,
     pub label: String,
+    pub color: Option<Color32>,
 }
 
 /// Stores properties of an edge that can be changed. Used to apply changes to the graph.
@@ -51,6 +53,7 @@ impl<
             order: usize::default(),
             selected: bool::default(),
             label: String::default(),
+            color: Default::default(),
         };
 
         let display = D::from(props.clone());

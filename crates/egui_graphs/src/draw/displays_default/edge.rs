@@ -15,6 +15,7 @@ pub struct DefaultEdgeShape {
     pub order: usize,
     pub selected: bool,
 
+    pub color: Option<Color32>,
     pub width: f32,
     pub tip_size: f32,
     pub tip_angle: f32,
@@ -29,6 +30,7 @@ impl<E: Clone> From<EdgeProps<E>> for DefaultEdgeShape {
             order: edge.order,
             selected: edge.selected,
             label_text: edge.label,
+            color: edge.color,
 
             width: 2.,
             tip_size: 15.,
@@ -151,6 +153,9 @@ impl<N: Clone, E: Clone, Ty: EdgeType, Ix: IndexType, D: DisplayNode<N, E, Ty, I
 
 impl DefaultEdgeShape {
     fn current_color(&self, ctx: &DrawContext) -> Color32 {
+        if let Some(c) = self.color {
+            return c;
+        }
         let style = if self.selected {
             ctx.ctx.style().visuals.widgets.active
         } else {
