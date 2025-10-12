@@ -1,19 +1,19 @@
 use std::marker::PhantomData;
 
 use crate::{
-    draw::{drawer::Drawer, DefaultEdgeShape, DefaultNodeShape, DrawContext},
-    layouts::{self, Layout, LayoutState},
-    metadata::{reset_metadata, MetadataFrame, MetadataInstance},
-    settings::{SettingsInteraction, SettingsNavigation, SettingsStyle},
     DisplayEdge, DisplayNode, Graph,
+    draw::{DefaultEdgeShape, DefaultNodeShape, DrawContext, drawer::Drawer},
+    layouts::{self, Layout, LayoutState},
+    metadata::{MetadataFrame, MetadataInstance, reset_metadata},
+    settings::{SettingsInteraction, SettingsNavigation, SettingsStyle},
 };
 
 use egui::{Id, PointerButton, Pos2, Rect, Response, Sense, Ui, Vec2, Widget};
 use instant::Instant;
 
+use petgraph::{Directed, graph::IndexType};
+use petgraph::{EdgeType, stable_graph::NodeIndex};
 use petgraph::{graph::EdgeIndex, stable_graph::DefaultIx};
-use petgraph::{graph::IndexType, Directed};
-use petgraph::{stable_graph::NodeIndex, EdgeType};
 
 // Shared cores to avoid duplication across general and force-run variants.
 fn ff_steps_core<N, E, Ty, Ix, Dn, De, S, L, Pre, Post>(
@@ -763,7 +763,7 @@ where
         let local_pos = self.local_pos(resp, cursor_pos);
         let found_edge = self.g.edge_by_screen_pos(meta, local_pos);
         let found_node = self.g.node_by_screen_pos(meta, local_pos);
-        if found_node.is_none() && found_edge.is_none() {
+        if found_node.is_none() && found_edge.is_none() && resp.double_clicked() {
             // click on empty space
             let nodes_selectable = eff.node_selection || eff.node_selection_multi;
             if nodes_selectable {
