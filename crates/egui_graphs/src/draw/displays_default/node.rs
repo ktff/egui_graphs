@@ -87,7 +87,7 @@ impl<N: Clone, E: Clone, Ty: EdgeType, Ix: IndexType> DisplayNode<N, E, Ty, Ix>
         self.dragged = state.dragged;
         self.hovered = state.hovered;
         self.label_text = state.label.to_string();
-        self.color = state.color();
+        //self.color = state.color();
     }
 }
 
