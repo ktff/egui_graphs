@@ -482,6 +482,7 @@ impl Quad {
 
     // returns repulsive force vector acting on `pos`
     fn apply_repulsion(&self, pos: Vec2, theta: f64, k: f64) -> Vec2 {
+        println!("apply_repulsion");
         if self.mass == 0.0 {
             return Vec2::ZERO;
         }
@@ -511,6 +512,7 @@ impl Quad {
 
 // Build quad tree from positions
 fn build_quad_tree(positions: &[Vec2]) -> Quad {
+    println!("build_quad_tree");
     let mut minx = f32::INFINITY;
     let mut miny = f32::INFINITY;
     let mut maxx = f32::NEG_INFINITY;
