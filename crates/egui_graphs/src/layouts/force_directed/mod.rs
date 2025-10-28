@@ -11,4 +11,5 @@ pub use implementations::fruchterman_reingold::with_extras::{
     FruchtermanReingoldWithExtras, FruchtermanReingoldWithExtrasState,
 };
 pub use implementations::fruchterman_reingold::{FruchtermanReingold, FruchtermanReingoldState};
+pub use implementations::spdf::{Sfdp, SfdpState};
 pub use layout::ForceDirected;
