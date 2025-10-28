@@ -18,12 +18,12 @@ impl<A: ForceAlgorithm> Layout<A::State> for ForceDirected<A> {
 
     fn next<N, E, Ty, Ix, Dn, De>(&mut self, g: &mut Graph<N, E, Ty, Ix, Dn, De>, ui: &egui::Ui)
     where
-        N: Clone,
-        E: Clone,
-        Ty: EdgeType,
-        Ix: IndexType,
-        Dn: DisplayNode<N, E, Ty, Ix>,
-        De: DisplayEdge<N, E, Ty, Ix, Dn>,
+        N: Sync + Clone,
+        E: Sync + Clone,
+        Ty: Sync + EdgeType,
+        Ix: Sync + IndexType,
+        Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+        De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>,
     {
         if g.node_count() == 0 {
             return;

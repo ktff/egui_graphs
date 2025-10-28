@@ -16,12 +16,12 @@ pub trait ForceAlgorithm: Default {
     /// Advance the simulation by one step using the given viewport rectangle if needed.
     fn step<N, E, Ty, Ix, Dn, De>(&mut self, g: &mut Graph<N, E, Ty, Ix, Dn, De>, view: Rect)
     where
-        N: Clone,
-        E: Clone,
-        Ty: EdgeType,
-        Ix: IndexType,
-        Dn: DisplayNode<N, E, Ty, Ix>,
-        De: DisplayEdge<N, E, Ty, Ix, Dn>;
+        N: Sync + Clone,
+        E: Sync + Clone,
+        Ty: Sync + EdgeType,
+        Ix: Sync + IndexType,
+        Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+        De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>;
 
     /// Return current state to be stored by the layout system.
     fn state(&self) -> Self::State;

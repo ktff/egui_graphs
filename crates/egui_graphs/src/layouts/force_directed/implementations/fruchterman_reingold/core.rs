@@ -1,10 +1,10 @@
+use crate::layouts::layout::AnimatedState;
+use crate::layouts::LayoutState;
 use crate::{DisplayEdge, DisplayNode, ForceAlgorithm, Graph};
 use egui::{Rect, Vec2};
 use petgraph::{csr::IndexType, stable_graph::NodeIndex, EdgeType};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-
-use crate::layouts::layout::AnimatedState;
-use crate::layouts::LayoutState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FruchtermanReingoldState {
@@ -120,12 +120,12 @@ impl ForceAlgorithm for FruchtermanReingold {
 
     fn step<N, E, Ty, Ix, Dn, De>(&mut self, g: &mut Graph<N, E, Ty, Ix, Dn, De>, view: Rect)
     where
-        N: Clone,
-        E: Clone,
-        Ty: EdgeType,
-        Ix: IndexType,
-        Dn: DisplayNode<N, E, Ty, Ix>,
-        De: DisplayEdge<N, E, Ty, Ix, Dn>,
+        N: Sync + Clone,
+        E: Sync + Clone,
+        Ty: Sync + EdgeType,
+        Ix: Sync + IndexType,
+        Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+        De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>,
     {
         if !self.state.is_running || g.node_count() == 0 {
             return;
@@ -192,7 +192,7 @@ pub(crate) fn prepare_constants(canvas: Rect, node_count: usize, k_scale: f32) -
     Some(k)
 }
 
-pub(crate) fn compute_repulsion<N, E, Ty, Ix, Dn, De>(
+pub(crate) fn compute_repulsion<N: Sync, E: Sync, Ty: Sync, Ix: Sync, Dn: Sync, De: Sync>(
     g: &Graph<N, E, Ty, Ix, Dn, De>,
     indices: &[NodeIndex<Ix>],
     disp: &mut [Vec2],
@@ -207,17 +207,52 @@ pub(crate) fn compute_repulsion<N, E, Ty, Ix, Dn, De>(
     Dn: DisplayNode<N, E, Ty, Ix>,
     De: DisplayEdge<N, E, Ty, Ix, Dn>,
 {
-    for i in 0..indices.len() {
-        for j in (i + 1)..indices.len() {
-            let (idx_i, idx_j) = (indices[i], indices[j]);
-            let delta = g.g().node_weight(idx_i).unwrap().location()
-                - g.g().node_weight(idx_j).unwrap().location();
-            let distance = delta.length().max(epsilon);
-            let force = c_repulse * (k * k) / distance;
-            let dir = delta / distance;
-            disp[i] += dir * force;
-            disp[j] -= dir * force;
+    if indices.len() < 1000 {
+        for i in 0..indices.len() {
+            for j in (i + 1)..indices.len() {
+                let (idx_i, idx_j) = (indices[i], indices[j]);
+                let delta = g.g().node_weight(idx_i).unwrap().location()
+                    - g.g().node_weight(idx_j).unwrap().location();
+                let distance = delta.length().max(epsilon);
+                let force = c_repulse * (k * k) / distance;
+                let dir = delta / distance;
+                disp[i] += dir * force;
+                disp[j] -= dir * force;
+            }
         }
+    } else {
+        let computed = (0..indices.len())
+            .into_par_iter()
+            .map(|i| {
+                let mut disp = Vec::with_capacity(indices.len());
+                disp.resize(indices.len(), Vec2::default());
+                for j in (i + 1)..indices.len() {
+                    let (idx_i, idx_j) = (indices[i], indices[j]);
+                    let delta = g.g().node_weight(idx_i).unwrap().location()
+                        - g.g().node_weight(idx_j).unwrap().location();
+                    let distance = delta.length().max(epsilon);
+                    let force = c_repulse * (k * k) / distance;
+                    let dir = delta / distance;
+                    disp[i] += dir * force;
+                    disp[j] -= dir * force;
+                }
+                disp
+            })
+            .reduce(
+                || Vec::new(),
+                |mut acc, add| {
+                    if acc.is_empty() {
+                        add
+                    } else {
+                        acc.iter_mut().zip(add).for_each(|(acc, add)| *acc += add);
+                        acc
+                    }
+                },
+            );
+
+        disp.iter_mut()
+            .zip(computed)
+            .for_each(|(acc, add)| *acc += add);
     }
 }
 
@@ -229,21 +264,41 @@ pub(crate) fn compute_attraction<N, E, Ty, Ix, Dn, De>(
     epsilon: f32,
     c_attract: f32,
 ) where
-    N: Clone,
-    E: Clone,
-    Ty: EdgeType,
-    Ix: IndexType,
-    Dn: DisplayNode<N, E, Ty, Ix>,
-    De: DisplayEdge<N, E, Ty, Ix, Dn>,
+    N: Sync + Clone,
+    E: Sync + Clone,
+    Ty: Sync + EdgeType,
+    Ix: Sync + IndexType,
+    Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+    De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>,
 {
-    for (vec_pos, &idx) in indices.iter().enumerate() {
-        let loc = g.g().node_weight(idx).unwrap().location();
-        for nbr in g.g().neighbors_undirected(idx) {
-            let delta = g.g().node_weight(nbr).unwrap().location() - loc;
-            let distance = delta.length().max(epsilon);
-            let force = c_attract * (distance * distance) / k;
-            disp[vec_pos] += (delta / distance) * force;
+    if indices.len() < 5000 {
+        for (vec_pos, &idx) in indices.iter().enumerate() {
+            let loc = g.g().node_weight(idx).unwrap().location();
+            for nbr in g.g().neighbors_undirected(idx) {
+                let delta = g.g().node_weight(nbr).unwrap().location() - loc;
+                let distance = delta.length().max(epsilon);
+                let force = c_attract * (distance * distance) / k;
+                disp[vec_pos] += (delta / distance) * force;
+            }
         }
+    } else {
+        indices
+            .par_iter()
+            .enumerate()
+            .map(|(vec_pos, &idx)| {
+                let mut disp = Vec2::default();
+                let loc = g.g().node_weight(idx).unwrap().location();
+                for nbr in g.g().neighbors_undirected(idx) {
+                    let delta = g.g().node_weight(nbr).unwrap().location() - loc;
+                    let distance = delta.length().max(epsilon);
+                    let force = c_attract * (distance * distance) / k;
+                    disp += (delta / distance) * force;
+                }
+                (vec_pos, disp)
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .for_each(|(i, add)| disp[i] += add);
     }
 }
 

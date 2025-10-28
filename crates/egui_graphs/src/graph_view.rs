@@ -1,19 +1,19 @@
 use std::marker::PhantomData;
 
 use crate::{
-    DisplayEdge, DisplayNode, Graph,
-    draw::{DefaultEdgeShape, DefaultNodeShape, DrawContext, drawer::Drawer},
+    draw::{drawer::Drawer, DefaultEdgeShape, DefaultNodeShape, DrawContext},
     layouts::{self, Layout, LayoutState},
-    metadata::{MetadataFrame, MetadataInstance, reset_metadata},
+    metadata::{reset_metadata, MetadataFrame, MetadataInstance},
     settings::{SettingsInteraction, SettingsNavigation, SettingsStyle},
+    DisplayEdge, DisplayNode, Graph,
 };
 
 use egui::{Id, PointerButton, Pos2, Rect, Response, Sense, Ui, Vec2, Widget};
 use instant::Instant;
 
-use petgraph::{Directed, graph::IndexType};
-use petgraph::{EdgeType, stable_graph::NodeIndex};
 use petgraph::{graph::EdgeIndex, stable_graph::DefaultIx};
+use petgraph::{graph::IndexType, Directed};
+use petgraph::{stable_graph::NodeIndex, EdgeType};
 
 // Shared cores to avoid duplication across general and force-run variants.
 fn ff_steps_core<N, E, Ty, Ix, Dn, De, S, L, Pre, Post>(
@@ -26,12 +26,12 @@ fn ff_steps_core<N, E, Ty, Ix, Dn, De, S, L, Pre, Post>(
     id: Option<String>,
 ) -> u32
 where
-    N: Clone,
-    E: Clone,
-    Ty: EdgeType,
-    Ix: IndexType,
-    Dn: DisplayNode<N, E, Ty, Ix>,
-    De: DisplayEdge<N, E, Ty, Ix, Dn>,
+    N: Sync + Clone,
+    E: Sync + Clone,
+    Ty: Sync + EdgeType,
+    Ix: Sync + IndexType,
+    Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+    De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>,
     S: LayoutState,
     L: Layout<S>,
     Pre: Fn(&mut S) -> Option<bool>,
@@ -73,12 +73,12 @@ fn ff_until_stable_core<N, E, Ty, Ix, Dn, De, S, L, Metric, Pre, Post>(
     id: Option<String>,
 ) -> (u32, f32)
 where
-    N: Clone,
-    E: Clone,
-    Ty: EdgeType,
-    Ix: IndexType,
-    Dn: DisplayNode<N, E, Ty, Ix>,
-    De: DisplayEdge<N, E, Ty, Ix, Dn>,
+    N: Sync + Clone,
+    E: Sync + Clone,
+    Ty: Sync + EdgeType,
+    Ix: Sync + IndexType,
+    Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+    De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>,
     S: LayoutState,
     L: Layout<S>,
     Metric: Fn(&S) -> Option<f32>,
@@ -262,12 +262,12 @@ impl ViewState {
 
 impl<N, E, Ty, Ix, Nd, Ed, S, L> Widget for &mut GraphView<'_, N, E, Ty, Ix, Nd, Ed, S, L>
 where
-    N: Clone,
-    E: Clone,
-    Ty: EdgeType,
-    Ix: IndexType,
-    Nd: DisplayNode<N, E, Ty, Ix>,
-    Ed: DisplayEdge<N, E, Ty, Ix, Nd>,
+    N: Sync + Clone,
+    E: Sync + Clone,
+    Ty: Sync + EdgeType,
+    Ix: Sync + IndexType,
+    Nd: Sync + DisplayNode<N, E, Ty, Ix>,
+    Ed: Sync + DisplayEdge<N, E, Ty, Ix, Nd>,
     S: LayoutState,
     L: Layout<S>,
 {
@@ -386,12 +386,12 @@ where
 
 impl<N, E, Ty, Ix, Dn, De, S, L> GraphView<'_, N, E, Ty, Ix, Dn, De, S, L>
 where
-    N: Clone,
-    E: Clone,
-    Ty: EdgeType,
-    Ix: IndexType,
-    Dn: DisplayNode<N, E, Ty, Ix>,
-    De: DisplayEdge<N, E, Ty, Ix, Dn>,
+    N: Sync + Clone,
+    E: Sync + Clone,
+    Ty: Sync + EdgeType,
+    Ix: Sync + IndexType,
+    Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+    De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>,
     S: LayoutState,
     L: Layout<S>,
 {
@@ -1185,12 +1185,12 @@ where
 // Force-run variants available when the layout state supports animation toggling.
 impl<N, E, Ty, Ix, Dn, De, S, L> GraphView<'_, N, E, Ty, Ix, Dn, De, S, L>
 where
-    N: Clone,
-    E: Clone,
-    Ty: EdgeType,
-    Ix: IndexType,
-    Dn: DisplayNode<N, E, Ty, Ix>,
-    De: DisplayEdge<N, E, Ty, Ix, Dn>,
+    N: Sync + Clone,
+    E: Sync + Clone,
+    Ty: Sync + EdgeType,
+    Ix: Sync + IndexType,
+    Dn: Sync + DisplayNode<N, E, Ty, Ix>,
+    De: Sync + DisplayEdge<N, E, Ty, Ix, Dn>,
     S: layouts::AnimatedState + LayoutState,
     L: Layout<S>,
 {

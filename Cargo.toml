@@ -32,6 +32,7 @@ must_use_candidate = { level = "allow", priority = 12 }
 struct_excessive_bools = { level = "allow", priority = 13 }
 return_self_not_must_use = { level = "allow", priority = 14 }
 
+
 [workspace.dependencies]
 egui = { version = "0.32", default-features = false }
 eframe = "0.32"
@@ -46,3 +47,4 @@ bevy = "0.16"
 bevy_egui = "0.36"
 ureq = { version = "2.9", default-features = true }
 criterion = { version = "0.5", features = ["html_reports"] }
+rayon = "0.7"

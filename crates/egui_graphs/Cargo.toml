@@ -23,6 +23,7 @@ petgraph = { workspace = true, default-features = false, features = [
 ] }
 serde = { workspace = true, features = ["derive"] }
 instant.workspace = true
+rayon.workspace = true
 
 crossbeam = { workspace = true, optional = true }
 

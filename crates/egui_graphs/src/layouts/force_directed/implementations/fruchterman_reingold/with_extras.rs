@@ -70,12 +70,12 @@ impl<E: ExtrasTuple> ForceAlgorithm for FruchtermanReingoldWithExtras<E> {
 
     fn step<N, Ed, Ty, Ix, Dn, De>(&mut self, g: &mut Graph<N, Ed, Ty, Ix, Dn, De>, view: Rect)
     where
-        N: Clone,
-        Ed: Clone,
-        Ty: EdgeType,
-        Ix: petgraph::csr::IndexType,
-        Dn: DisplayNode<N, Ed, Ty, Ix>,
-        De: DisplayEdge<N, Ed, Ty, Ix, Dn>,
+        N: Sync + Clone,
+        Ed: Sync + Clone,
+        Ty: Sync + EdgeType,
+        Ix: Sync + petgraph::csr::IndexType,
+        Dn: Sync + DisplayNode<N, Ed, Ty, Ix>,
+        De: Sync + DisplayEdge<N, Ed, Ty, Ix, Dn>,
     {
         if g.node_count() == 0 || !self.state.base.is_running {
             return;
