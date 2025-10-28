@@ -241,8 +241,8 @@ impl ForceAlgorithm for Sfdp {
         // After finishing, pos_levels[0] holds final positions for nodes in internal order
         // Apply displacements to real graph nodes while respecting dt/damping/max_step
         //println!(
-            "After finishing, pos_levels[0] holds final positions for nodes in internal order"
-        );
+        // "After finishing, pos_levels[0] holds final positions for nodes in internal order"
+        // );
         let final_positions = &pos_levels[0];
         let mut sum = 0.0f32;
         let mut count = 0usize;
