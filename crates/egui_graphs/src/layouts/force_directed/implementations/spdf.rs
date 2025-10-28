@@ -26,6 +26,7 @@ use rand::Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::f32::EPSILON;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SfdpState {
@@ -137,18 +138,18 @@ impl ForceAlgorithm for Sfdp {
         }
 
         // Build adjacency + edge list for internal processing only once per step
-        println!("build_internal_representation");
+        //println!("build_internal_representation");
         let (rep, _) = build_internal_representation(g, &indices);
 
         // Prepare constants
-        println!("prepare_constants");
+        //println!("prepare_constants");
         let Some(_) = prepare_constants(view, n, self.state.k_scale) else {
             return;
         };
         let theta = self.state.theta as f64;
 
         // Build multilevel graphs
-        println!("Build multilevel graphs");
+        //println!("Build multilevel graphs");
         let mut levels: Vec<GraphRep> = Vec::new();
         let mut mappings: Vec<Vec<usize>> = Vec::new();
         levels.push(rep.clone());
@@ -165,7 +166,7 @@ impl ForceAlgorithm for Sfdp {
         }
 
         // positions per level
-        println!("positions per level");
+        //println!("positions per level");
         let l = levels.len();
         let mut pos_levels: Vec<Vec<Vec2>> = Vec::with_capacity(l);
         // initialize finest level positions from the graph
@@ -181,7 +182,7 @@ impl ForceAlgorithm for Sfdp {
         }
 
         // initialize coarsest positions randomly if necessary
-        println!(" initialize coarsest positions randomly if necessary");
+        //println!(" initialize coarsest positions randomly if necessary");
         use rand::thread_rng;
         let mut rng = thread_rng();
         let coarsest = l - 1;
@@ -195,7 +196,7 @@ impl ForceAlgorithm for Sfdp {
         }
 
         // Run multilevel from coarse to fine
-        println!(" Run multilevel from coarse to fine");
+        //println!(" Run multilevel from coarse to fine");
         for lvl_rev in (0..l).rev() {
             let lvl = lvl_rev; // current level index
             let graph_rep = &levels[lvl];
@@ -239,7 +240,7 @@ impl ForceAlgorithm for Sfdp {
 
         // After finishing, pos_levels[0] holds final positions for nodes in internal order
         // Apply displacements to real graph nodes while respecting dt/damping/max_step
-        println!(
+        //println!(
             "After finishing, pos_levels[0] holds final positions for nodes in internal order"
         );
         let final_positions = &pos_levels[0];
@@ -396,124 +397,168 @@ fn coarsen(g: &GraphRep) -> (GraphRep, Vec<usize>) {
 
 // ----------------- Barnes-Hut quadtree -----------------
 #[derive(Debug)]
-struct Quad {
-    center: Vec2,
-    half: f64,
-    mass: f64,
-    mass_pos: Vec2,
-    children: [Option<Box<Quad>>; 4],
-    point_index: Option<usize>,
+pub struct Quad {
+    /// Bounding box center
+    pub center: Vec2,
+    /// Half-width of this quadrant
+    pub half_size: f32,
+    /// Child quadrants (NW, NE, SW, SE)
+    pub children: [Option<Box<Quad>>; 4],
+    /// Whether this is a leaf (no children)
+    pub is_leaf: bool,
+    /// Index of node stored in this leaf (if any)
+    pub node_index: Option<usize>,
+    /// Total mass of this quadrant
+    pub mass: f32,
+    /// Center of mass for all points in this quadrant
+    pub center_of_mass: Vec2,
 }
 
 impl Quad {
-    fn new(center: Vec2, half: f64) -> Self {
-        Quad {
+    /// Create a new root quadrant.
+    pub fn new(center: Vec2, half_size: f32) -> Self {
+        Self {
             center,
-            half,
-            mass: 0.0,
-            mass_pos: Vec2::ZERO,
+            half_size,
             children: [None, None, None, None],
-            point_index: None,
+            is_leaf: true,
+            node_index: None,
+            mass: 0.0,
+            center_of_mass: Vec2::ZERO,
         }
     }
 
-    fn insert(&mut self, pos: Vec2, index: usize) {
-        println!("insert");
-        if self.mass == 0.0 {
-            self.mass = 1.0;
-            self.mass_pos = pos;
-            self.point_index = Some(index);
-            return;
+    /// Determine which child quadrant contains the given point.
+    fn child_index(&self, p: Vec2) -> usize {
+        let right = p.x > self.center.x;
+        let top = p.y > self.center.y;
+        match (top, right) {
+            (true, true) => 0,   // NE
+            (true, false) => 1,  // NW
+            (false, false) => 2, // SW
+            (false, true) => 3,  // SE
         }
-        // If leaf with a point, push it down
-        if let Some(old_idx) = self.point_index.take() {
-            let old_pos = self.mass_pos;
-            let child_idx_old = self.child_index_for(old_pos);
-            if self.children[child_idx_old].is_none() {
-                self.children[child_idx_old] = Some(Box::new(Quad::new(
-                    self.child_center(child_idx_old),
-                    self.half / 2.0,
-                )));
+    }
+
+    /// Create a new child quadrant.
+    fn create_child(&mut self, idx: usize) {
+        let quarter = self.half_size * 0.5;
+        let offset = match idx {
+            0 => Vec2::new(quarter, quarter),   // NE
+            1 => Vec2::new(-quarter, quarter),  // NW
+            2 => Vec2::new(-quarter, -quarter), // SW
+            3 => Vec2::new(quarter, -quarter),  // SE
+            _ => Vec2::ZERO,
+        };
+        self.children[idx] = Some(Box::new(Quad::new(self.center + offset, quarter)));
+    }
+
+    /// Subdivide this leaf into four children.
+    fn subdivide(&mut self) {
+        for i in 0..4 {
+            self.create_child(i);
+        }
+        self.is_leaf = false;
+    }
+
+    /// Insert a point into the quadtree (stack-safe iterative version).
+    pub fn insert_iterative(&mut self, point: Vec2, index: usize, mass: f32) {
+        let mut stack = Vec::with_capacity(64);
+        stack.push((self as *mut Quad, point, index, mass));
+
+        while let Some((quad_ptr, p, i, m)) = stack.pop() {
+            // SAFETY: All pointers come from our own quads, never invalidated.
+            let quad = unsafe { &mut *quad_ptr };
+
+            // Update mass and center of mass
+            let total_mass = quad.mass + m;
+            if total_mass > EPSILON {
+                quad.center_of_mass = (quad.center_of_mass * quad.mass + p * m) / total_mass;
             }
-            self.children[child_idx_old]
-                .as_mut()
-                .unwrap()
-                .insert(old_pos, old_idx);
-        }
-        // insert new point
-        let child_idx = self.child_index_for(pos);
-        if self.children[child_idx].is_none() {
-            self.children[child_idx] = Some(Box::new(Quad::new(
-                self.child_center(child_idx),
-                self.half / 2.0,
-            )));
-        }
-        self.children[child_idx]
-            .as_mut()
-            .unwrap()
-            .insert(pos, index);
-        // update mass center
-        self.mass += 1.0;
-        let prev = self.mass_pos * ((self.mass - 1.0) as f32);
-        let combined = prev + pos;
-        self.mass_pos = combined * (1.0 / (self.mass as f32));
-    }
+            quad.mass = total_mass;
 
-    fn child_index_for(&self, p: Vec2) -> usize {
-        let left = p.x < self.center.x;
-        let top = p.y < self.center.y;
-        match (left, top) {
-            (true, true) => 0,
-            (false, true) => 1,
-            (true, false) => 2,
-            (false, false) => 3,
-        }
-    }
+            // If this is a leaf
+            if quad.is_leaf {
+                if let Some(existing_idx) = quad.node_index {
+                    // Already has a node, need to subdivide
+                    if quad.half_size < 1e-6 {
+                        // Stop subdividing further (degenerate case)
+                        continue;
+                    }
 
-    fn child_center(&self, idx: usize) -> Vec2 {
-        let quarter = (self.half as f32) / 2.0;
-        match idx {
-            0 => self.center + Vec2::new(-(quarter), -(quarter)),
-            1 => self.center + Vec2::new(quarter, -quarter),
-            2 => self.center + Vec2::new(-quarter, quarter),
-            3 => self.center + Vec2::new(quarter, quarter),
-            _ => unreachable!(),
-        }
-    }
+                    // Subdivide and reinsert both old and new nodes
+                    quad.subdivide();
 
-    // returns repulsive force vector acting on `pos`
-    fn apply_repulsion(&self, pos: Vec2, theta: f64, k: f64) -> Vec2 {
-        println!("apply_repulsion");
-        if self.mass == 0.0 {
-            return Vec2::ZERO;
-        }
-        let dx = self.mass_pos.x - pos.x;
-        let dy = self.mass_pos.y - pos.y;
-        let dist2 = (dx * dx + dy * dy) as f64 + 1e-9;
-        let dist = dist2.sqrt();
-        let size = (self.half * 2.0) as f64;
-        if size / dist < theta || self.children.iter().all(|c| c.is_none()) {
-            // approximate as single mass
-            // repulsive ~ k^2 * mass / dist^2
-            let force = (k * k) / dist2 * (self.mass as f64);
-            let fx = -(dx as f64) / dist * force;
-            let fy = -(dy as f64) / dist * force;
-            return Vec2::new(fx as f32, fy as f32);
-        }
-        let mut res = Vec2::ZERO;
-        for c in &self.children {
-            if let Some(child) = c {
-                let f = child.apply_repulsion(pos, theta, k);
-                res += f;
+                    // Reinsert existing node
+                    let existing_pos = quad.center_of_mass; // Approximate position
+                    let child_idx = quad.child_index(existing_pos);
+                    if let Some(child) = quad.children[child_idx].as_mut() {
+                        stack.push((child.as_mut(), existing_pos, existing_idx, 1.0));
+                    }
+
+                    // Reinsert new node
+                    let new_child_idx = quad.child_index(p);
+                    if let Some(child) = quad.children[new_child_idx].as_mut() {
+                        stack.push((child.as_mut(), p, i, m));
+                    }
+
+                    // Clear local node
+                    quad.node_index = None;
+                    quad.is_leaf = false;
+                } else {
+                    // Empty leaf: store node
+                    quad.node_index = Some(i);
+                    quad.center_of_mass = p;
+                    quad.mass = m;
+                }
+            } else {
+                // Internal node: forward to correct child
+                let child_idx = quad.child_index(p);
+                if quad.children[child_idx].is_none() {
+                    quad.create_child(child_idx);
+                }
+                if let Some(child) = quad.children[child_idx].as_mut() {
+                    stack.push((child.as_mut(), p, i, m));
+                }
             }
         }
-        res
+    }
+
+    /// Compute repulsive force using Barnes–Hut approximation.
+    /// This is also written iteratively to avoid stack recursion.
+    pub fn compute_repulsive_force(&self, pos: Vec2, theta: f32, k: f32) -> Vec2 {
+        let mut force = Vec2::ZERO;
+        let mut stack = Vec::with_capacity(64);
+        stack.push(self);
+
+        while let Some(node) = stack.pop() {
+            if node.mass == 0.0 {
+                continue;
+            }
+
+            let delta = node.center_of_mass - pos;
+            let dist = delta.length().max(1e-6);
+
+            // Size / distance ratio
+            if node.half_size / dist < theta || node.is_leaf {
+                // Treat as single body
+                let repulse = (k * k) / dist;
+                force -= delta.normalized() * repulse;
+            } else {
+                // Visit children
+                for child in node.children.iter().flatten() {
+                    stack.push(child);
+                }
+            }
+        }
+
+        force
     }
 }
 
 // Build quad tree from positions
 fn build_quad_tree(positions: &[Vec2]) -> Quad {
-    println!("build_quad_tree");
+    //println!("build_quad_tree");
     let mut minx = f32::INFINITY;
     let mut miny = f32::INFINITY;
     let mut maxx = f32::NEG_INFINITY;
@@ -531,9 +576,9 @@ fn build_quad_tree(positions: &[Vec2]) -> Quad {
     let cx = (minx + maxx) / 2.0;
     let cy = (miny + maxy) / 2.0;
     let half = ((maxx - minx).max(maxy - miny)) / 2.0 + 1e-6;
-    let mut root = Quad::new(Vec2::new(cx, cy), half as f64);
+    let mut root = Quad::new(Vec2::new(cx, cy), half);
     for (i, p) in positions.iter().enumerate() {
-        root.insert(*p, i);
+        root.insert_iterative(*p, i, 1.0);
     }
     root
 }
@@ -558,7 +603,7 @@ fn relax_barnes_hut_level(
     for iter in 0..iterations {
         // build tree
         let root = build_quad_tree(positions);
-        println!("Out of build_quad_tree");
+        //println!("Out of build_quad_tree");
         // reset disp
         for d in &mut disp {
             *d = Vec2::ZERO;
@@ -567,12 +612,12 @@ fn relax_barnes_hut_level(
         // repulsive via BH (parallelize for big graphs)
         if n > 2000 {
             disp.par_iter_mut().enumerate().for_each(|(i, d)| {
-                let f = root.apply_repulsion(positions[i], theta, k);
+                let f = root.compute_repulsive_force(positions[i], theta as f32, k as f32);
                 *d += f * (c_repulse as f32);
             });
         } else {
             for i in 0..n {
-                let f = root.apply_repulsion(positions[i], theta, k);
+                let f = root.compute_repulsive_force(positions[i], theta as f32, k as f32);
                 disp[i] += f * (c_repulse as f32);
             }
         }
