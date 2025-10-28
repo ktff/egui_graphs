@@ -28,7 +28,7 @@ impl LayoutState for FruchtermanReingoldState {}
 impl Default for FruchtermanReingoldState {
     fn default() -> Self {
         FruchtermanReingoldState {
-            is_running: true,
+            is_running: false,
             dt: 0.05,
             epsilon: 1e-3,
             damping: 0.3,
