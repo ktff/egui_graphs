@@ -137,15 +137,18 @@ impl ForceAlgorithm for Sfdp {
         }
 
         // Build adjacency + edge list for internal processing only once per step
-        let (mut rep, index_map) = build_internal_representation(g, &indices);
+        println!("build_internal_representation");
+        let (rep, _) = build_internal_representation(g, &indices);
 
         // Prepare constants
-        let Some(k) = prepare_constants(view, n, self.state.k_scale) else {
+        println!("prepare_constants");
+        let Some(_) = prepare_constants(view, n, self.state.k_scale) else {
             return;
         };
         let theta = self.state.theta as f64;
 
         // Build multilevel graphs
+        println!("Build multilevel graphs");
         let mut levels: Vec<GraphRep> = Vec::new();
         let mut mappings: Vec<Vec<usize>> = Vec::new();
         levels.push(rep.clone());
@@ -162,8 +165,9 @@ impl ForceAlgorithm for Sfdp {
         }
 
         // positions per level
-        let L = levels.len();
-        let mut pos_levels: Vec<Vec<Vec2>> = Vec::with_capacity(L);
+        println!("positions per level");
+        let l = levels.len();
+        let mut pos_levels: Vec<Vec<Vec2>> = Vec::with_capacity(l);
         // initialize finest level positions from the graph
         let mut finest_pos = vec![Vec2::ZERO; n];
         for (i, &node_idx) in indices.iter().enumerate() {
@@ -172,14 +176,15 @@ impl ForceAlgorithm for Sfdp {
         }
         pos_levels.push(finest_pos);
         // for coarser levels we'll create placeholders
-        for lvl in 1..L {
+        for lvl in 1..l {
             pos_levels.push(vec![Vec2::ZERO; levels[lvl].n]);
         }
 
         // initialize coarsest positions randomly if necessary
+        println!(" initialize coarsest positions randomly if necessary");
         use rand::thread_rng;
         let mut rng = thread_rng();
-        let coarsest = L - 1;
+        let coarsest = l - 1;
         if pos_levels[coarsest].iter().all(|p| p == &Vec2::ZERO) {
             let ncoarse = levels[coarsest].n;
             let radius = (ncoarse as f32).sqrt() * 10.0;
@@ -190,11 +195,12 @@ impl ForceAlgorithm for Sfdp {
         }
 
         // Run multilevel from coarse to fine
-        for lvl_rev in (0..L).rev() {
+        println!(" Run multilevel from coarse to fine");
+        for lvl_rev in (0..l).rev() {
             let lvl = lvl_rev; // current level index
             let graph_rep = &levels[lvl];
             // choose iterations scaled by level (coarser -> more iterations)
-            let iters = ((self.state.base_iters as f32) / (1.0 + (L - 1 - lvl) as f32 * 0.5))
+            let iters = ((self.state.base_iters as f32) / (1.0 + (l - 1 - lvl) as f32 * 0.5))
                 .max(5.0) as usize;
             // area and k for this level
             let area = (graph_rep.n as f32).sqrt() * 100.0;
@@ -233,6 +239,9 @@ impl ForceAlgorithm for Sfdp {
 
         // After finishing, pos_levels[0] holds final positions for nodes in internal order
         // Apply displacements to real graph nodes while respecting dt/damping/max_step
+        println!(
+            "After finishing, pos_levels[0] holds final positions for nodes in internal order"
+        );
         let final_positions = &pos_levels[0];
         let mut sum = 0.0f32;
         let mut count = 0usize;
@@ -577,17 +586,17 @@ fn relax_barnes_hut_level(
             }
         } else {
             // parallel edge processing aggregated into per-node accumulators
-            let mut adds = vec![Vec2::ZERO; n];
-            graph.edges.par_iter().for_each(|&(u, v)| {
-                let delta = positions[u] - positions[v];
-                let dist = delta.length().max(epsilon as f32);
-                let force = (dist * dist) as f64 / k;
-                let vec = delta / dist * (force as f32) * (c_attract as f32);
-                // atomic updates would be ideal — we accumulate into local vec then reduce.
-                // For simplicity in this example we'll do a coarse-grained reduction using chunking.
-                // (In a production implementation, use atomic floats or per-thread buffers.)
-                // Fallback: single-threaded accumulation if graph too big for safe parallel here.
-            });
+            // let mut adds = vec![Vec2::ZERO; n];
+            // graph.edges.par_iter().for_each(|&(u, v)| {
+            //     let delta = positions[u] - positions[v];
+            //     let dist = delta.length().max(epsilon as f32);
+            //     let force = (dist * dist) as f64 / k;
+            //     let vec = delta / dist * (force as f32) * (c_attract as f32);
+            //     // atomic updates would be ideal — we accumulate into local vec then reduce.
+            //     // For simplicity in this example we'll do a coarse-grained reduction using chunking.
+            //     // (In a production implementation, use atomic floats or per-thread buffers.)
+            //     // Fallback: single-threaded accumulation if graph too big for safe parallel here.
+            // });
             // Fallback: do single-threaded if we didn't compute adds
             for &(u, v) in &graph.edges {
                 let delta = positions[u] - positions[v];
