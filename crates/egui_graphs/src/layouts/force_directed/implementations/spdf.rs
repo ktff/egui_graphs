@@ -418,6 +418,7 @@ impl Quad {
     }
 
     fn insert(&mut self, pos: Vec2, index: usize) {
+        println!("insert");
         if self.mass == 0.0 {
             self.mass = 1.0;
             self.mass_pos = pos;
@@ -557,6 +558,7 @@ fn relax_barnes_hut_level(
     for iter in 0..iterations {
         // build tree
         let root = build_quad_tree(positions);
+        println!("Out of build_quad_tree");
         // reset disp
         for d in &mut disp {
             *d = Vec2::ZERO;
