@@ -3,6 +3,7 @@ use crate::layouts::LayoutState;
 use crate::{DisplayEdge, DisplayNode, ForceAlgorithm, Graph};
 use egui::{Rect, Vec2};
 use petgraph::{csr::IndexType, stable_graph::NodeIndex, EdgeType};
+use rand::Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -225,8 +226,11 @@ pub(crate) fn compute_repulsion<N: Sync, E: Sync, Ty: Sync, Ix: Sync, Dn: Sync, 
             .into_par_iter()
             .map(|i| {
                 let mut disp = Vec::with_capacity(indices.len());
+                let mut rand = rand::rng();
                 disp.resize(indices.len(), Vec2::default());
-                for j in (i + 1)..indices.len() {
+                let range = (i + 1)..indices.len();
+                for _ in 0..1000 {
+                    let j = rand.random_range(range.clone());
                     let (idx_i, idx_j) = (indices[i], indices[j]);
                     let delta = g.g().node_weight(idx_i).unwrap().location()
                         - g.g().node_weight(idx_j).unwrap().location();
