@@ -226,11 +226,8 @@ pub(crate) fn compute_repulsion<N: Sync, E: Sync, Ty: Sync, Ix: Sync, Dn: Sync, 
             .into_par_iter()
             .map(|i| {
                 let mut disp = Vec::with_capacity(indices.len());
-                let mut rand = rand::rng();
                 disp.resize(indices.len(), Vec2::default());
-                let range = (i + 1)..indices.len();
-                for _ in 0..1000.min(range.end - range.start) {
-                    let j = rand.random_range(range.clone());
+                for j in (i + 1)..indices.len() {
                     let (idx_i, idx_j) = (indices[i], indices[j]);
                     let delta = g.g().node_weight(idx_i).unwrap().location()
                         - g.g().node_weight(idx_j).unwrap().location();
